@@ -1,0 +1,23 @@
+[package]
+name = "rust-bus"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+env_logger = "0.10.0"
+iced = { version="0.8.0", features=["svg", "palette", "tokio", "image", "glow"]}
+iced_aw = "0.4.1"
+iced_graphics = "0.7.0"
+iced_lazy = "0.5.0"
+iced_native = "0.9.1"
+iced_style = "0.7.0"
+log = "0.4.17"
+rfd = "0.11.3"
+serde = { version = "1.0.158", features = ["derive"] }
+serde_json = "1.0.94"
+tokio = "1.26.0"
+tokio-modbus = "0.7.1"
+tokio-serial = "5.4.4"
+

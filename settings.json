@@ -1,0 +1,29 @@
+{
+  "connection": {
+    "Tcp": {
+      "ip": "127.0.0.1",
+      "port": 5502,
+      "address": 255
+    }
+  },
+  "table": {
+    "registers": [
+      {
+        "register_type": "HoldingRegister",
+        "address": 4,
+        "length": 1,
+        "name": "VELOCITY",
+        "value": 30,
+        "description": ""
+      },
+      {
+        "register_type": "HoldingRegister",
+        "address": 3,
+        "length": 1,
+        "name": "DIRECTION",
+        "value": 0,
+        "description": ""
+      }
+    ]
+  }
+}
