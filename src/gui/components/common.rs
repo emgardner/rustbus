@@ -7,6 +7,7 @@ use crate::gui::protocol::Protocol;
 use crate::gui::style::ButtonType;
 use iced_native::widget::container::Appearance;
 use iced_native::widget::container::StyleSheet;
+use iced_native::widget::TextInput;
 
 #[derive(Debug, Copy, Clone)]
 pub struct ContainerStyle {
@@ -48,6 +49,20 @@ where
         .center_y()
         .into()
 }
+
+// pub fn default_text_input<'a, Renderer, F>(
+//     value: impl ToString, 
+//     on_change: F
+// ) -> TextInput<'a, Protocol, Renderer>
+// where
+//     F: 'a + Fn(String) -> Protocol,
+//     Renderer: iced_native::text::Renderer,
+//     Renderer::Theme: StyleSheet,
+//     <Renderer as iced_native::Renderer>::Theme: iced_style::text_input::StyleSheet
+// {
+// 
+//     TextInput::new("", &value.to_string(), on_change)
+// }
 
 pub fn header() -> Element<'static, Protocol> {
     Container::new(

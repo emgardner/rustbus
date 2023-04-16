@@ -57,6 +57,8 @@ pub struct App {
     is_error: bool,
     #[serde(skip_deserializing, skip_serializing)]
     error_text: String,
+    #[serde(skip_deserializing, skip_serializing)]
+    pub request_history: Vec<RequestParams>
 }
 
 impl std::fmt::Debug for App {
@@ -137,6 +139,8 @@ impl Application for App {
             request_params: RequestParams::default(),
             is_error: false,
             error_text: String::new(),
+            // request_history: Vec::new()
+            request_history: (1..20).into_iter().map(|x| RequestParams::default()).collect()
         };
         app.load();
         (app, Command::none())
@@ -174,6 +178,7 @@ impl Application for App {
                     WorkerEvent::Error(e) => {
                         self.is_error = true;
                         self.error_text = e;
+                        self.request_params.polling = false;
                     },
                     WorkerEvent::Connected => {
                         self.connected = true;
@@ -192,8 +197,13 @@ impl Application for App {
                 self.send_message(Commands::DeviceCommand(req));
             }
             Protocol::ExecuteRequest => {
-                println!("Execute Request Pressed");
                 self.send_message(Commands::RequestCommand(self.request_params.request.clone()));
+            }
+            Protocol::StartPoll => {
+                self.request_params.polling = true;
+            }
+            Protocol::StopPoll => {
+                self.request_params.polling = false;
             }
             Protocol::RequestChanged(params) => {
                 self.request_params = params;
@@ -267,10 +277,14 @@ impl Application for App {
     }
 
     fn subscription(&self) -> Subscription<Protocol> {
-        iced::Subscription::batch([
+        let mut subscriptions = vec![
             connect().map(Protocol::WorkerEvent),
-            iced::time::every(Duration::from_secs(5)).map(|_x| Protocol::SaveFile),
-        ])
+            iced::time::every(Duration::from_secs(5)).map(|_x| Protocol::SaveFile)
+        ];
+        if self.request_params.polling {
+            subscriptions.push(iced::time::every(self.request_params.poll).map(|_x| Protocol::ExecuteRequest));
+        };
+        iced::Subscription::batch(subscriptions)
     }
 
     fn view(&self) -> Element<Protocol> {

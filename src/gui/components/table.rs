@@ -281,21 +281,17 @@ pub fn actions<'a>(idx: usize, reg: &Register) -> Container<'a, Protocol> {
                 .on_press(Protocol::ModbusRequest(Request::from(
                     RegisterRequest::Read(reg.clone())
                 )))
-                //.style(iced_native::theme::Button::Primary),
                 .style(ButtonType::Image.into()),
             button(image(Handle::from_path("./resources/write.png")).width(image_size))
                 .on_press(Protocol::ModbusRequest(Request::from(
                     RegisterRequest::Write(reg.clone())
                 )))
-                //.style(iced_native::theme::Button::Secondary),
                 .style(ButtonType::Image.into()),
             button(image(Handle::from_path("./resources/garbage.png")).width(image_size))
                 .on_press(Protocol::TableCommand(TableCommand::Delete(idx)))
-                //.style(iced_native::theme::Button::Destructive),
                 .style(ButtonType::Image.into()),
             button(image(Handle::from_path("./resources/plus.png")).width(image_size))
                 .on_press(Protocol::TableCommand(TableCommand::AddRegister(Some(idx))))
-                // .style(iced_native::theme::Button::Positive)
                 .style(ButtonType::Image.into()),
         ]
         .align_items(Alignment::Center)

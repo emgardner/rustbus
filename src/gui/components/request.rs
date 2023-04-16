@@ -1,6 +1,7 @@
 use crate::gui::components::common::ContainerStyle;
 use crate::gui::protocol::Protocol;
-use iced::widget::{self, button, pick_list, text_input, Container, Row};
+use crate::gui::style::ButtonType;
+use iced::widget::{self, button, pick_list, text_input, Container, Row, image, image::Handle};
 use iced::widget::{column, row, text};
 use iced::Renderer;
 use iced::{Alignment, Color, Element};
@@ -21,15 +22,19 @@ pub struct RequestParams {
     pub request: Request,
     pub request_type: RequestType,
     pub response: Option<Response>,
+    pub poll: std::time::Duration,
+    pub polling: bool
 }
 
 #[derive(Debug, Clone)]
 pub enum RequestUpdate {
+    None,
     RequestType(RequestType),
     SetAddress(u16),
     Request(Request),
     UpdateVecU16(usize, u16),
     UpdateVecBool(usize, bool),
+    SetPoll(std::time::Duration)
 }
 
 fn response_or_request(request_paramters: &RequestParams) -> Element<Protocol> {
@@ -148,7 +153,7 @@ fn response_or_request(request_paramters: &RequestParams) -> Element<Protocol> {
     }
 }
 
-fn get_address(req: &Request) -> u16 {
+pub fn get_address(req: &Request) -> u16 {
     match req {
         Request::ReadCoils(addr, _val) => *addr,
         Request::ReadDiscreteInputs(addr, _val) => *addr,
@@ -288,9 +293,16 @@ fn get_value(req: &Request) -> Element<Protocol> {
     }
 }
 
+
+
+
+
+
+
 impl RequestParams {
     pub fn update(&mut self, msg: RequestUpdate) {
         match msg {
+            RequestUpdate::None => (),
             RequestUpdate::RequestType(req_type) => {
                 let req = req_type.new_request();
                 self.request_type = req_type;
@@ -315,17 +327,29 @@ impl RequestParams {
                     }
                     _ => (),
                 };
-            }
+            },
             RequestUpdate::UpdateVecBool(idx, val) => match &mut self.request {
                 Request::WriteMultipleCoils(_addr, vals) => {
                     vals.get_mut(idx).map(|x| *x = val);
                 }
                 _ => (),
             },
+            RequestUpdate::SetPoll(duration) => {
+                self.poll = duration
+            },
         }
     }
 
     pub fn view(&self) -> Element<Protocol> {
+        let poll_btn = if !self.polling {
+           button(image(Handle::from_path("./resources/sync.png")).width(25.0))
+            .on_press(Protocol::StartPoll)
+            .style(ButtonType::Image.into())
+        } else {
+           button(image(Handle::from_path("./resources/stop_poll.png")).width(25.0))
+            .on_press(Protocol::StopPoll)
+            .style(ButtonType::Image.into())
+        };
         Container::new(
             column![
                 row![
@@ -338,7 +362,7 @@ impl RequestParams {
                     .align_items(Alignment::Center),
                     column![
                         "Address",
-                        text_input("Address", &get_address(&self.request).to_string(), |x| {
+                        text_input("Address", &self.get_address().to_string(), |x| {
                             let parsed = x.parse::<u16>();
                             match parsed {
                                 Ok(new_addr) => {
@@ -351,7 +375,20 @@ impl RequestParams {
                     .align_items(Alignment::Center)
                     .width(100.0),
                     get_value(&self.request),
-                    button("Execute").on_press(Protocol::ExecuteRequest)
+                    button("Execute").on_press(Protocol::ExecuteRequest),
+                    column![
+                        "Poll (ms)",
+                        text_input("1000", &self.poll.as_millis().to_string(), |x| {
+                            let num = x.parse::<u64>();
+                            match num {
+                                Ok(n) => Protocol::RequestUpdate(RequestUpdate::SetPoll(std::time::Duration::from_millis(n))),
+                                _ => Protocol::RequestUpdate(RequestUpdate::None),
+                            }
+                        }),
+                    ]
+                    .align_items(Alignment::Center)
+                    .width(100.0),
+                    poll_btn
                 ]
                 .spacing(10.0)
                 .align_items(Alignment::End),
@@ -362,6 +399,42 @@ impl RequestParams {
         .padding(10.0)
         .into()
     }
+
+    
+    pub fn get_address(&self) -> u16 {
+        match &self.request {
+            Request::ReadCoils(addr, _val) => *addr,
+            Request::ReadDiscreteInputs(addr, _val) => *addr,
+            Request::WriteSingleCoil(addr, _val) => *addr,
+            Request::WriteMultipleCoils(addr, _val) => *addr,
+            Request::ReadInputRegisters(addr, _val) => *addr,
+            Request::ReadHoldingRegisters(addr, _val) => *addr,
+            Request::WriteSingleRegister(addr, _val) => *addr,
+            Request::WriteMultipleRegisters(addr, _val) => *addr,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn get_data(&self) -> Element<Protocol> {
+        match &self.request {
+            Request::ReadCoils(_addr, val) => request_history_single_data(val.to_string()),
+            Request::ReadDiscreteInputs(_addr, val) => request_history_single_data(val.to_string()),
+            Request::WriteSingleCoil(_addr, val) => request_history_single_data(val.to_string()),
+            Request::WriteMultipleCoils(_addr, val) => Row::with_children( val.iter().map(|x| text(x.to_string()).into() ).collect() ).into(),
+            Request::ReadInputRegisters(_addr, val) => request_history_single_data(val.to_string()),
+            Request::ReadHoldingRegisters(_addr, val) => request_history_single_data(val.to_string()),
+            Request::WriteSingleRegister(_addr, val) => request_history_single_data(val.to_string()),
+            Request::WriteMultipleRegisters(_addr, val) => Row::with_children( val.iter().map(|x| text(x.to_string()).into() ).collect() ).into(),
+            _ => unreachable!(),
+        }
+    }
+}
+
+fn request_history_single_data(data: String) -> Element<'static, Protocol> {
+    text(data)
+        .width(200.0)
+        .into()
+        
 }
 
 impl<Message> RequestComponent<Message> {
@@ -381,6 +454,8 @@ impl std::default::Default for RequestParams {
             request: Request::ReadCoils(0, 0),
             request_type: RequestType::ReadCoils,
             response: None,
+            poll: std::time::Duration::from_millis(1000),
+            polling: false
         }
     }
 }
@@ -446,18 +521,6 @@ impl RequestType {
     ];
 }
 
-// pub fn screen<'a, T, Message>(t: T) -> Container<'a, Message, Renderer>
-// where
-//     T: Into<Element<'a, Message, Renderer>>,
-// {
-//     Container::new(t)
-//         .width(Length::Fill)
-//         .height(Length::Fill)
-//         .center_x()
-//         // .center_y()
-//         .into()
-// }
-
 fn response_data_box<'a, T, Message>(t: T) -> Container<'a, Message>
 where
     T: Into<Element<'a, Message, Renderer>>,
@@ -476,217 +539,3 @@ where
         .center_y()
 }
 
-impl<Message, Renderer> Component<Message, Renderer> for RequestComponent<Message>
-where
-    Renderer: iced_native::text::Renderer + 'static,
-    Renderer::Theme: widget::text::StyleSheet
-        + widget::text_input::StyleSheet
-        + widget::pick_list::StyleSheet
-        + widget::scrollable::StyleSheet
-        + iced_native::overlay::menu::StyleSheet
-        + widget::container::StyleSheet,
-    <Renderer::Theme as iced::overlay::menu::StyleSheet>::Style:
-        From<<Renderer::Theme as iced_style::pick_list::StyleSheet>::Style>,
-{
-    type State = ();
-    type Event = RequestMessage;
-
-    fn update(&mut self, _state: &mut Self::State, event: RequestMessage) -> Option<Message> {
-        match event {
-            RequestMessage::UpdateRequest(req) => self.params.request = req,
-            _ => (),
-        };
-        Some(self.on_change.as_ref()(self.params.clone()))
-    }
-
-    // fn view(&self, _state: &Self::State) -> Element<'static, Self::Event, Renderer> {
-    fn view(&self, _state: &Self::State) -> Element<Self::Event, Renderer> {
-        println!("{:?}", self.params);
-        let eles = match &self.params.request {
-            Request::ReadCoils(addr, val) => row![
-                column![
-                    "Address",
-                    text_input("Address", &addr.to_string(), |x| {
-                        let parsed = x.parse::<u16>();
-                        match parsed {
-                            Ok(new_addr) => {
-                                RequestMessage::UpdateRequest(Request::ReadCoils(new_addr, *val))
-                            }
-                            Err(_e) => RequestMessage::None,
-                        }
-                    }),
-                ]
-                .align_items(Alignment::Center)
-                .width(100.0),
-                column![
-                    "Number of Coils",
-                    text_input("Number of Coils", &val.to_string(), |x| {
-                        let parsed = x.parse::<u16>();
-                        match parsed {
-                            Ok(new_val) => {
-                                RequestMessage::UpdateRequest(Request::ReadCoils(*addr, new_val))
-                            }
-                            Err(_e) => RequestMessage::None,
-                        }
-                    })
-                ]
-                .align_items(Alignment::Center)
-                .width(100.0)
-            ]
-            .spacing(10.0),
-            Request::ReadDiscreteInputs(addr, val) => {
-                row![
-                    text_input("Address", &addr.to_string(), |_x| { RequestMessage::None }),
-                    text_input("Number of Inputs", &val.to_string(), |_x| {
-                        RequestMessage::None
-                    })
-                ]
-            }
-            Request::WriteSingleCoil(addr, _val) => {
-                row![text_input("Address", &addr.to_string(), |_x| {
-                    RequestMessage::None
-                })]
-            }
-            Request::WriteMultipleCoils(addr, _val) => {
-                row![text_input("Address", &addr.to_string(), |_x| {
-                    RequestMessage::None
-                })]
-            }
-            Request::ReadInputRegisters(addr, _val) => {
-                row![text_input("Address", &addr.to_string(), |_x| {
-                    RequestMessage::None
-                })]
-            }
-            Request::ReadHoldingRegisters(addr, _val) => {
-                row![text_input("Address", &addr.to_string(), |_x| {
-                    RequestMessage::None
-                })]
-            }
-            Request::WriteSingleRegister(addr, _val) => {
-                row![text_input("Address", &addr.to_string(), |_x| {
-                    RequestMessage::None
-                })]
-            }
-            Request::WriteMultipleRegisters(addr, _val) => {
-                row![text_input("Address", &addr.to_string(), |_x| {
-                    RequestMessage::None
-                })]
-            }
-            _ => {
-                row![text("Unsupported Code")]
-            }
-        };
-
-        let resp_container = |t| {
-            Container::new(t)
-                //.style(iced::theme::Container::Custom(Box::new(ContainerStyle {
-                //    text_color: None,
-                //    background: None,
-                //    border_radius: 0.0,
-                //    border_width: 2.0,
-                //    border_color: Color::WHITE,
-                //})))
-                .center_x()
-                .center_y()
-        };
-
-        let req_data = match &self.params.request {
-            Request::ReadCoils(_addr, val) => {
-                if let Some(Response::ReadCoils(coils)) = &self.params.response {
-                    Row::with_children(
-                        // coils.iter().map(|x| { response_data_box(text(if *x { "1"} else { "0"} )).into() }).collect()
-                        coils
-                            .iter()
-                            .map(|x| {
-                                Element::from(resp_container(text(if *x { "1" } else { "0" })))
-                            })
-                            .collect(),
-                    )
-                } else {
-                    Row::with_children(
-                        (0..*val)
-                            .enumerate()
-                            .map(|(_i, _x)| resp_container(text("1")).into())
-                            .collect(),
-                    )
-                }
-            }
-            Request::ReadDiscreteInputs(_addr, _val) => {
-                row![]
-            }
-            Request::WriteSingleCoil(_addr, _val) => {
-                row![]
-            }
-            Request::WriteMultipleCoils(_addr, _val) => {
-                // Row::with_children(
-                //     (0..*val).enumerate().map(|(i,x)| { text_input("0", &i.to_string(), |new_val| { RequestMessage::None }).into() }).collect()
-                // )
-                row![]
-            }
-            Request::ReadInputRegisters(_addr, _val) => {
-                row![]
-            }
-            Request::ReadHoldingRegisters(_addr, _val) => {
-                row![]
-            }
-            Request::WriteSingleRegister(_addr, val) => {
-                row![text_input("0", &val.to_string(), |_new_val| {
-                    RequestMessage::None
-                })]
-            }
-            Request::WriteMultipleRegisters(_addr, _val) => {
-                row![]
-                // Row::with_children(
-                //     (0..*val).enumerate().map(|(i,x)| { text_input("0", &i.to_string(), |new_val| { RequestMessage::None }).into() }).collect()
-                // )
-            }
-            _ => {
-                row![text("Unsupported Code")]
-            }
-        };
-
-        Container::new(column![
-            row![
-                column![
-                    "Request",
-                    pick_list(
-                        &RequestType::ALL[..],
-                        Some(self.params.request_type),
-                        |_val| { RequestMessage::None }
-                    )
-                ]
-                .align_items(Alignment::Center),
-                eles,
-            ]
-            .spacing(10.0)
-            .align_items(Alignment::End),
-            req_data
-        ])
-        .padding(10.0)
-        .into()
-    }
-}
-
-impl<'a, Message, Renderer> From<RequestComponent<Message>> for Element<'a, Message, Renderer>
-where
-    Message: 'a,
-    Renderer: iced_native::text::Renderer + 'static,
-    Renderer::Theme: widget::text::StyleSheet
-        + widget::text_input::StyleSheet
-        + widget::pick_list::StyleSheet
-        + widget::scrollable::StyleSheet
-        + iced_native::overlay::menu::StyleSheet
-        + widget::container::StyleSheet,
-    <Renderer::Theme as iced::overlay::menu::StyleSheet>::Style:
-        From<<Renderer::Theme as iced_style::pick_list::StyleSheet>::Style>,
-{
-    fn from(rc: RequestComponent<Message>) -> Self {
-        iced_lazy::component(rc)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RequestMessage {
-    None,
-    UpdateRequest(Request),
-}

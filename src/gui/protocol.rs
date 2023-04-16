@@ -15,6 +15,8 @@ pub enum Protocol {
     TableCommand(TableCommand),
     ModbusRequest(Request),
     ExecuteRequest,
+    StartPoll,
+    StopPoll,
     RequestChanged(RequestParams),
     ReqChanged(Request),
     RequestUpdate(RequestUpdate),
